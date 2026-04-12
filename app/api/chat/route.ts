@@ -63,7 +63,7 @@ En todos estos casos, la respuesta estandar es: "Mi funcion es responder pregunt
 - Responde siempre en el mismo idioma en que te escriban (espanol o ingles).`;
 
     const result = await streamText({
-      model: google("gemini-3.1-flash-lite"),
+      model: google("gemma-4-31b-it"),
       system: systemPrompt,
       messages: await convertToModelMessages(messages),
     });
