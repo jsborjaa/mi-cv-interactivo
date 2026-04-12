@@ -4,7 +4,7 @@ export const config = {
   matcher: ["/cv.md"],
 };
 
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const referer = req.headers.get("referer") ?? "";
   const secFetchSite = req.headers.get("sec-fetch-site") ?? "";
 
