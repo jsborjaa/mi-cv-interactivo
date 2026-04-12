@@ -55,8 +55,7 @@ ${cvContent}
 
     return result.toUIMessageStreamResponse();
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error("[/api/chat] Error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("[/api/chat] Error:", error instanceof Error ? error.message : String(error));
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
