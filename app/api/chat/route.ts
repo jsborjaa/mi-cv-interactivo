@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     const result = await streamText({
       model: google("gemini-2.0-flash"),
       system: systemPrompt,
-      messages: convertToModelMessages(messages),
+      messages: await convertToModelMessages(messages),
     });
 
     // toUIMessageStreamResponse es el formato correcto para el nuevo AI SDK
