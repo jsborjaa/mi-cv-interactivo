@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     }
     const cvContent = await cvRes.text();
 
-    const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    const apiKey = process.env.GeminiAPIKey ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ error: "Missing API Key" }, { status: 500 });
     }
