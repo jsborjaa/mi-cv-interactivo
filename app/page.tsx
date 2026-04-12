@@ -36,7 +36,7 @@ MarkdownMessage.displayName = "MarkdownMessage";
 export default function ChatPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [input, setInput] = useState("");
-  const { messages, sendMessage, status } = useChat();
+  const { messages, sendMessage, status, error } = useChat();
   const isLoading = status === "submitted" || status === "streaming";
 
   useEffect(() => {
@@ -114,7 +114,8 @@ export default function ChatPage() {
         {status === "error" && (
           <div className="flex justify-start mb-4">
             <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm text-red-600 dark:text-red-400 text-sm">
-              Ha ocurrido un error. Por favor, intenta de nuevo.
+              <p className="font-semibold mb-1">Error de conexión:</p>
+              <p>{error?.message ?? "Ha ocurrido un error. Por favor, intenta de nuevo."}</p>
             </div>
           </div>
         )}
