@@ -48,7 +48,7 @@ ${cvContent}
 - Responde siempre en el mismo idioma en que te escriban (espanol o ingles).`;
 
     const result = await streamText({
-      model: google("gemini-2.0-flash"),
+      model: google("gemini-1.5-flash"),
       system: systemPrompt,
       messages: await convertToModelMessages(messages),
     });
