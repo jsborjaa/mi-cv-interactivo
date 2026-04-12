@@ -65,9 +65,26 @@ export default function ChatPage() {
       {/* Mensajes */}
       <main className="flex-1 overflow-y-auto px-4 py-6 max-w-2xl w-full mx-auto">
         {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-center gap-3 text-zinc-400 dark:text-zinc-600">
+          <div className="flex flex-col items-center justify-center h-full text-center gap-4 px-2">
             <span className="text-4xl">👋</span>
-            <p className="text-base font-medium">¡Hola! Pregúntame sobre mi experiencia, habilidades o proyectos.</p>
+            <p className="text-base font-medium text-zinc-500 dark:text-zinc-400">¡Hola! Soy el asistente digital de Joshep.<br />Pregúntame sobre su experiencia, habilidades o proyectos.</p>
+            <div className="flex flex-wrap justify-center gap-2 mt-2">
+              {[
+                "¿Qué experiencia tiene en gestión de proyectos?",
+                "¿Tiene certificación PMP?",
+                "¿Qué tecnologías domina?",
+                "¿Tiene experiencia con IA?",
+                "¿En qué proyectos ha trabajado?",
+              ].map((suggestion) => (
+                <button
+                  key={suggestion}
+                  onClick={() => { setInput(suggestion); }}
+                  className="text-xs px-3 py-1.5 rounded-full border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
           </div>
         )}
         {messages.map((m, i) => (
@@ -91,6 +108,13 @@ export default function ChatPage() {
           <div className="flex justify-start mb-4">
             <div className="bg-white dark:bg-zinc-900 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm text-zinc-400 text-sm">
               <span className="animate-pulse">Escribiendo...</span>
+            </div>
+          </div>
+        )}
+        {status === "error" && (
+          <div className="flex justify-start mb-4">
+            <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm text-red-600 dark:text-red-400 text-sm">
+              Ha ocurrido un error. Por favor, intenta de nuevo.
             </div>
           </div>
         )}
