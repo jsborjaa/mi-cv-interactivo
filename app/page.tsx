@@ -265,8 +265,8 @@ export default function ChatPage() {
         systemPrompt: string;
       };
 
-      // 3. Open WebSocket directly to Gemini Live (v1alpha for preview models)
-      const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+      // 3. Open WebSocket directly to Gemini Live (v1beta required for preview models)
+      const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
