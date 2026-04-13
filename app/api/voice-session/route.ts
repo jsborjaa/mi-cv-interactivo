@@ -48,43 +48,42 @@ export async function POST() {
     // The key only grants Gemini API access (no sensitive data), free-tier
     // rate-limits naturally cap any abuse, making this safe for a personal CV.
     // Discover which Live API models are actually available for this API key
-    const listRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}&pageSize=200`
-    );
+    // Discover which Live API models are available for diagnostics
     let liveModels: string[] = [];
-    if (listRes.ok) {
-      const listData = await listRes.json() as { models?: Array<{ name: string; supportedGenerationMethods?: string[] }> };
-      liveModels = (listData.models ?? [])
-        .filter((m) =>
-          m.supportedGenerationMethods?.includes("bidiGenerateContent") ||
-          m.name.toLowerCase().includes("live") ||
-          m.name.toLowerCase().includes("audio")
-        )
-        .map((m) => m.name);
+    try {
+      const listRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}&pageSize=200`
+      );
+      if (listRes.ok) {
+        const listData = await listRes.json() as { models?: Array<{ name: string; supportedGenerationMethods?: string[] }> };
+        liveModels = (listData.models ?? [])
+          .filter((m) =>
+            (m.supportedGenerationMethods ?? []).includes("bidiGenerateContent") ||
+            m.name.toLowerCase().includes("live") ||
+            m.name.toLowerCase().includes("audio")
+          )
+          .map((m) => m.name);
+        console.log("[voice-session] Available bidiGenerateContent models:", liveModels);
+      }
+    } catch (listErr) {
+      console.warn("[voice-session] Could not fetch model list:", listErr);
     }
-    console.log("[voice-session] Available bidiGenerateContent models:", liveModels);
 
-    // Also log ALL models to see what's available
-    if (listRes.ok) {
-      const listData2 = await listRes.clone?.()?.json?.().catch(() => null) ?? null;
-      if (listData2) console.log("[voice-session] All models:", (listData2 as { models?: Array<{ name: string }> }).models?.map((m) => m.name));
-    }
-
-    // Prefer known stable model; fall back to first discovered live model
+    // Prefer the model confirmed working in AI Studio; fall back to first discovered
     const PREFERRED = [
       "gemini-2.5-flash-native-audio-preview-12-2025",
+      "models/gemini-2.5-flash-native-audio-preview-12-2025",
       "models/gemini-2.0-flash-live-001",
       "models/gemini-live-2.0-flash-001",
     ];
     const model =
       PREFERRED.find((m) => liveModels.includes(m)) ??
-      liveModels[0] ??
-      "gemini-2.5-flash-native-audio-preview-12-2025"; // last resort fallback
+      "gemini-2.5-flash-native-audio-preview-12-2025";
 
     return NextResponse.json({
       apiKey,
       model,
-      availableLiveModels: liveModels, // expose in response for debugging
+      availableLiveModels: liveModels,
       systemPrompt,
     });
   } catch (error) {
