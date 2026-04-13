@@ -137,16 +137,24 @@ export default function ChatPage() {
   // ── WebSocket message handler ──────────────────────────────────────────────
   const handleWsMessage = useCallback(
     (event: MessageEvent) => {
-      // Log binary frames (audio data from model)
-      if (typeof event.data !== "string") {
-        console.log("[voice] WS binary message, byteLength:", (event.data as ArrayBuffer)?.byteLength ?? "blob");
+      // Gemini Native Audio sends ALL messages as binary ArrayBuffer frames (JSON encoded as UTF-8)
+      // We must decode them before parsing
+      let raw: string;
+      if (typeof event.data === "string") {
+        raw = event.data;
+      } else if (event.data instanceof ArrayBuffer) {
+        raw = new TextDecoder().decode(event.data);
+      } else {
+        // Shouldn't happen after setting binaryType="arraybuffer", but guard anyway
+        console.warn("[voice] Unknown WS frame type:", typeof event.data);
+        return;
       }
 
       let data: Record<string, unknown>;
       try {
-        data = JSON.parse(event.data as string);
+        data = JSON.parse(raw);
       } catch {
-        // Binary / non-JSON frame — not an error, just audio data or keepalive
+        // Not JSON — ignore
         return;
       }
 
@@ -293,6 +301,7 @@ export default function ChatPage() {
       const apiVersion = model.includes("2.0") ? "v1alpha" : "v1beta";
       const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.${apiVersion}.GenerativeService.BidiGenerateContent?key=${apiKey}`;
       const ws = new WebSocket(wsUrl);
+      ws.binaryType = "arraybuffer"; // receive binary frames as ArrayBuffer, not Blob
       wsRef.current = ws;
 
       // Connection timeout: if setupComplete doesn't arrive in 12s, abort
