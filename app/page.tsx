@@ -259,14 +259,19 @@ export default function ChatPage() {
         stream.getTracks().forEach((t) => t.stop());
         throw new Error(`Error al conectar con el servicio de voz (${res.status})`);
       }
-      const { apiKey, model, systemPrompt } = (await res.json()) as {
+      const { apiKey, model, availableLiveModels, systemPrompt } = (await res.json()) as {
         apiKey: string;
         model: string;
+        availableLiveModels?: string[];
         systemPrompt: string;
       };
+      console.log("[voice] Using model:", model);
+      console.log("[voice] All available Live API models:", availableLiveModels);
 
-      // 3. Open WebSocket directly to Gemini Live (v1beta required for preview models)
-      const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+      // Try v1alpha first (required for gemini-2.0-flash-live-001 and older models),
+      // v1beta for newer preview models. We'll detect which one based on the model name.
+      const apiVersion = model.includes("2.0") ? "v1alpha" : "v1beta";
+      const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.${apiVersion}.GenerativeService.BidiGenerateContent?key=${apiKey}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 

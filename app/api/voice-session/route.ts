@@ -47,10 +47,37 @@ export async function POST() {
     // The WebSocket lives 100% in the browser — Vercel has no timeout risk.
     // The key only grants Gemini API access (no sensitive data), free-tier
     // rate-limits naturally cap any abuse, making this safe for a personal CV.
+    // Discover which Live API models are actually available for this API key
+    const listRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}&pageSize=200`
+    );
+    let liveModels: string[] = [];
+    if (listRes.ok) {
+      const listData = await listRes.json() as { models?: Array<{ name: string; supportedGenerationMethods?: string[] }> };
+      liveModels = (listData.models ?? [])
+        .filter((m) =>
+          m.supportedGenerationMethods?.includes("bidiGenerateContent") ??
+          m.name.toLowerCase().includes("live") ??
+          m.name.toLowerCase().includes("audio")
+        )
+        .map((m) => m.name);
+    }
+    console.log("[voice-session] Available bidiGenerateContent models:", liveModels);
+
+    // Prefer known stable model; fall back to first discovered live model
+    const PREFERRED = [
+      "models/gemini-2.0-flash-live-001",
+      "models/gemini-live-2.0-flash-001",
+    ];
+    const model =
+      PREFERRED.find((m) => liveModels.includes(m)) ??
+      liveModels[0] ??
+      "models/gemini-2.0-flash-live-001"; // last resort fallback
+
     return NextResponse.json({
       apiKey,
-      // "Gemini Flash Live" — Live API, Unlimited RPM/RPD on free tier
-      model: "gemini-2.5-flash-native-audio-preview-12-2025",
+      model,
+      availableLiveModels: liveModels, // expose in response for debugging
       systemPrompt,
     });
   } catch (error) {
