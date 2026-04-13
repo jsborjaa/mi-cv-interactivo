@@ -241,10 +241,22 @@ export default function ChatPage() {
     pendingOutTextRef.current = "";
 
     try {
-      // 1. Get API key + model + system prompt from our backend
+      // 1. Ask for mic permission FIRST so the dialog doesn't race with WS setup.
+      //    If the user denies, we fail here with a clear message.
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+        });
+      } catch {
+        throw new Error("Permiso de micrófono denegado. Actívalo en la configuración del navegador.");
+      }
+      streamRef.current = stream;
+
+      // 2. Get API key + model + system prompt from our backend
       const res = await fetch("/api/voice-session", { method: "POST" });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+        stream.getTracks().forEach((t) => t.stop());
         throw new Error(`Error al conectar con el servicio de voz (${res.status})`);
       }
       const { apiKey, model, systemPrompt } = (await res.json()) as {
@@ -253,14 +265,12 @@ export default function ChatPage() {
         systemPrompt: string;
       };
 
-      // 2. Open WebSocket directly to Gemini Live using API key auth.
-      //    The WebSocket lives entirely in the browser — Vercel is not involved.
-      const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+      // 3. Open WebSocket directly to Gemini Live (v1alpha for preview models)
+      const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${apiKey}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
-        // 3. Send setup message with system prompt, voice config, transcription
         ws.send(
           JSON.stringify({
             setup: {
@@ -285,26 +295,25 @@ export default function ChatPage() {
       };
 
       ws.onmessage = handleWsMessage;
-      ws.onerror = () => {
+      ws.onerror = (e) => {
+        console.error("[voice] WebSocket error:", e);
         setVoiceState("error");
-        setVoiceError("Error de conexión con el servicio de voz.");
+        setVoiceError("Error de conexión WebSocket. Revisa la consola del navegador.");
       };
-      ws.onclose = () => {
-        setVoiceState((prev) => (prev !== "error" ? "idle" : prev));
+      ws.onclose = (e) => {
+        console.warn("[voice] WebSocket closed:", e.code, e.reason);
+        // Show the close code so we can diagnose which Gemini error it was
+        setVoiceState((prev) => {
+          if (prev === "idle" || prev === "error") return prev;
+          // Show the close code so we can diagnose which Gemini error it was
+          const reason = e.reason ? ` — ${e.reason}` : "";
+          setVoiceError(`Sesión de voz cerrada (código ${e.code}${reason}). Intenta de nuevo.`);
+          return "error";
+        });
         stopCapture();
       };
 
-      // 4. Capture microphone audio
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
-        },
-      });
-      streamRef.current = stream;
-
-      // Create AudioContext at 16 kHz (browser will resample from hardware rate)
+      // 4. Set up AudioWorklet to capture and forward mic audio
       const captureCtx = new AudioContext({ sampleRate: 16000 });
       captureCtxRef.current = captureCtx;
       const actualRate = captureCtx.sampleRate;
