@@ -49,8 +49,8 @@ export async function POST() {
     // rate-limits naturally cap any abuse, making this safe for a personal CV.
     return NextResponse.json({
       apiKey,
-      // "Gemini 2.5 Flash Native Audio Dialog" from AI Studio — Unlimited RPM/RPD free tier
-      model: "models/gemini-2.5-flash-preview-native-audio-dialog",
+      // "Gemini 2.5 Flash Native Audio" — Live API, Unlimited RPM/RPD on free tier
+      model: "gemini-2.5-flash-native-audio-preview",
       systemPrompt,
     });
   } catch (error) {
