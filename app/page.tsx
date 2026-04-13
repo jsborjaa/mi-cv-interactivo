@@ -137,10 +137,16 @@ export default function ChatPage() {
   // ── WebSocket message handler ──────────────────────────────────────────────
   const handleWsMessage = useCallback(
     (event: MessageEvent) => {
+      // Log binary frames (audio data from model)
+      if (typeof event.data !== "string") {
+        console.log("[voice] WS binary message, byteLength:", (event.data as ArrayBuffer)?.byteLength ?? "blob");
+      }
+
       let data: Record<string, unknown>;
       try {
         data = JSON.parse(event.data as string);
       } catch {
+        // Binary / non-JSON frame — not an error, just audio data or keepalive
         return;
       }
 
@@ -300,13 +306,17 @@ export default function ChatPage() {
 
       ws.onopen = () => {
         console.log("[voice] WS open, sending setup for model:", model);
-        // Minimal setup — only fields supported by all Live API models
         ws.send(
           JSON.stringify({
             setup: {
               model,
               generationConfig: {
                 responseModalities: ["AUDIO"],
+                speechConfig: {
+                  voiceConfig: {
+                    prebuiltVoiceConfig: { voiceName: "Aoede" },
+                  },
+                },
               },
               systemInstruction: { parts: [{ text: systemPrompt }] },
             },
