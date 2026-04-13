@@ -49,8 +49,8 @@ export async function POST() {
     // rate-limits naturally cap any abuse, making this safe for a personal CV.
     return NextResponse.json({
       apiKey,
-      // "Gemini 3.1 Flash Live" — Live API, Unlimited RPM/RPD on free tier
-      model: "gemini-3.1-flash-live-preview",
+      // "Gemini Flash Live" — Live API, Unlimited RPM/RPD on free tier
+      model: "gemini-2.5-flash-native-audio-preview-12-2025",
       systemPrompt,
     });
   } catch (error) {
