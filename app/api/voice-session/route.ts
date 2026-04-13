@@ -50,7 +50,7 @@ export async function POST() {
     const newSessionExpireTime = new Date(now.getTime() + 60 * 1000).toISOString(); // 1 min to start
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/token?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1alpha/token?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -76,9 +76,7 @@ export async function POST() {
 
     return NextResponse.json({
       token,
-      // Stable Live API model — change to "models/gemini-2.5-flash-preview-native-audio-dialog"
-      // or "models/gemini-live-2.5-flash-001" if this model ID is unavailable.
-      model: "models/gemini-2.0-flash-live-001",
+      model: "models/gemini-3.1-flash-live-preview",
       systemPrompt,
     });
   } catch (error) {
