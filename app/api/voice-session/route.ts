@@ -72,13 +72,14 @@ export async function POST() {
 
     // Prefer known stable model; fall back to first discovered live model
     const PREFERRED = [
+      "gemini-2.5-flash-native-audio-preview-12-2025",
       "models/gemini-2.0-flash-live-001",
       "models/gemini-live-2.0-flash-001",
     ];
     const model =
       PREFERRED.find((m) => liveModels.includes(m)) ??
       liveModels[0] ??
-      "models/gemini-2.0-flash-live-001"; // last resort fallback
+      "gemini-2.5-flash-native-audio-preview-12-2025"; // last resort fallback
 
     return NextResponse.json({
       apiKey,
