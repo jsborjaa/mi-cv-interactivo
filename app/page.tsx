@@ -85,6 +85,7 @@ export default function ChatPage() {
   const streamRef = useRef<MediaStream | null>(null);
   const playCtxRef = useRef<AudioContext | null>(null);
   const nextPlayTimeRef = useRef(0);
+  const setupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingOutTextRef = useRef(""); // assistant transcription accumulator
   const pendingInTextRef = useRef("");  // user transcription accumulator
 
@@ -143,8 +144,20 @@ export default function ChatPage() {
         return;
       }
 
+      // Log every server message for diagnostics (visible in DevTools console)
+      console.log("[voice] WS message:", JSON.stringify(data).slice(0, 300));
+
+      // Server-side error in the message body (not a WS close)
+      if (data.error) {
+        console.error("[voice] Server error:", data.error);
+        setVoiceState("error");
+        setVoiceError(`Error del modelo: ${JSON.stringify(data.error)}`);
+        return;
+      }
+
       // Session ready → start listening
-      if (data.setupComplete) {
+      if (data.setupComplete !== undefined) {
+        if (setupTimeoutRef.current) clearTimeout(setupTimeoutRef.current);
         setVoiceState("listening");
         return;
       }
@@ -220,6 +233,7 @@ export default function ChatPage() {
 
   // ── Stop full voice session ────────────────────────────────────────────────
   const stopSession = useCallback(() => {
+    if (setupTimeoutRef.current) clearTimeout(setupTimeoutRef.current);
     wsRef.current?.close();
     wsRef.current = null;
     stopCapture();
@@ -275,29 +289,34 @@ export default function ChatPage() {
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
+      // Connection timeout: if setupComplete doesn't arrive in 12s, abort
+      const setupTimeout = setTimeout(() => {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.close();
+        }
+        setVoiceState("error");
+        setVoiceError("Tiempo de espera agotado. El modelo no respondio al setup. Revisa la consola del navegador.");
+      }, 12000);
+
       ws.onopen = () => {
+        console.log("[voice] WS open, sending setup for model:", model);
+        // Minimal setup — only fields supported by all Live API models
         ws.send(
           JSON.stringify({
             setup: {
               model,
               generationConfig: {
                 responseModalities: ["AUDIO"],
-                speechConfig: {
-                  voiceConfig: {
-                    prebuiltVoiceConfig: { voiceName: "Kore" },
-                  },
-                },
               },
               systemInstruction: { parts: [{ text: systemPrompt }] },
-              inputAudioTranscription: {},
-              outputAudioTranscription: {},
-              realtimeInputConfig: {
-                automaticActivityDetection: { disabled: false },
-              },
             },
           })
         );
       };
+
+      // Clear the setup timeout as soon as setupComplete arrives (handled in handleWsMessage)
+      // We store it so handleWsMessage can clear it
+      setupTimeoutRef.current = setupTimeout;
 
       ws.onmessage = handleWsMessage;
       ws.onerror = (e) => {

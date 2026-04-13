@@ -56,13 +56,19 @@ export async function POST() {
       const listData = await listRes.json() as { models?: Array<{ name: string; supportedGenerationMethods?: string[] }> };
       liveModels = (listData.models ?? [])
         .filter((m) =>
-          m.supportedGenerationMethods?.includes("bidiGenerateContent") ??
-          m.name.toLowerCase().includes("live") ??
+          m.supportedGenerationMethods?.includes("bidiGenerateContent") ||
+          m.name.toLowerCase().includes("live") ||
           m.name.toLowerCase().includes("audio")
         )
         .map((m) => m.name);
     }
     console.log("[voice-session] Available bidiGenerateContent models:", liveModels);
+
+    // Also log ALL models to see what's available
+    if (listRes.ok) {
+      const listData2 = await listRes.clone?.()?.json?.().catch(() => null) ?? null;
+      if (listData2) console.log("[voice-session] All models:", (listData2 as { models?: Array<{ name: string }> }).models?.map((m) => m.name));
+    }
 
     // Prefer known stable model; fall back to first discovered live model
     const PREFERRED = [
