@@ -241,23 +241,21 @@ export default function ChatPage() {
     pendingOutTextRef.current = "";
 
     try {
-      // 1. Get ephemeral token + system prompt from our backend
+      // 1. Get API key + model + system prompt from our backend
       const res = await fetch("/api/voice-session", { method: "POST" });
       if (!res.ok) {
         const body = await res.json().catch(() => ({})) as Record<string, unknown>;
-        throw new Error(
-          `Error al conectar (${res.status})${body.detail ? ": " + body.detail : ""}`
-        );
+        throw new Error(`Error al conectar con el servicio de voz (${res.status})`);
       }
-      const { token, model, systemPrompt } = (await res.json()) as {
-        token: string;
+      const { apiKey, model, systemPrompt } = (await res.json()) as {
+        apiKey: string;
         model: string;
         systemPrompt: string;
       };
 
-      // 2. Open WebSocket directly to Gemini Live using the ephemeral token
-      //    (API key never touches the browser)
-      const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained?access_token=${token}`;
+      // 2. Open WebSocket directly to Gemini Live using API key auth.
+      //    The WebSocket lives entirely in the browser — Vercel is not involved.
+      const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 

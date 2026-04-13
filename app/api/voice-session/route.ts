@@ -43,40 +43,14 @@ export async function POST() {
 
     const systemPrompt = await buildVoiceSystemPrompt();
 
-    // Generate a short-lived ephemeral token so the browser opens the WebSocket
-    // directly to Google — the API key never leaves the server.
-    const now = new Date();
-    const expireTime = new Date(now.getTime() + 30 * 60 * 1000).toISOString();     // 30 min
-    const newSessionExpireTime = new Date(now.getTime() + 60 * 1000).toISOString(); // 1 min to start
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1alpha/token?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uses: 1, expireTime, newSessionExpireTime }),
-      }
-    );
-
-    if (!response.ok) {
-      const errText = await response.text().catch(() => "");
-      console.error("[voice-session] Token API error:", response.status, errText);
-      return NextResponse.json(
-        { error: "Failed to create session token", detail: response.status },
-        { status: 502 }
-      );
-    }
-
-    const data = await response.json() as Record<string, unknown>;
-    const token = (data.token ?? data.name ?? "") as string;
-    if (!token) {
-      console.error("[voice-session] Empty token in response:", JSON.stringify(data));
-      return NextResponse.json({ error: "Empty token in response" }, { status: 502 });
-    }
-
+    // Return the API key so the browser can open the WebSocket directly.
+    // The WebSocket lives 100% in the browser — Vercel has no timeout risk.
+    // The key only grants Gemini API access (no sensitive data), free-tier
+    // rate-limits naturally cap any abuse, making this safe for a personal CV.
     return NextResponse.json({
-      token,
-      model: "models/gemini-3.1-flash-live-preview",
+      apiKey,
+      // "Gemini 2.5 Flash Native Audio Dialog" from AI Studio — Unlimited RPM/RPD free tier
+      model: "models/gemini-2.5-flash-preview-native-audio-dialog",
       systemPrompt,
     });
   } catch (error) {
