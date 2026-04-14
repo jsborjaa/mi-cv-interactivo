@@ -7,6 +7,15 @@ import { join } from "path";
 // Node.js runtime: permite leer cv.md con fs sin necesidad de fetch HTTP
 export const runtime = "nodejs";
 
+// Module-level cache: cv.md se lee una sola vez por instancia serverless
+let cachedCV: string | null = null;
+async function getCV(): Promise<string> {
+  if (!cachedCV) {
+    cachedCV = await readFile(join(process.cwd(), "public", "cv.md"), "utf-8");
+  }
+  return cachedCV;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { messages }: { messages: UIMessage[] } = await req.json();
@@ -14,8 +23,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid messages format" }, { status: 400 });
     }
 
-    const cvPath = join(process.cwd(), "public", "cv.md");
-    const cvContent = await readFile(cvPath, "utf-8");
+    const cvContent = await getCV();
 
     const apiKey = process.env.GeminiAPIKey ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY;
     if (!apiKey) {

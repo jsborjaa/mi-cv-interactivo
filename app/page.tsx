@@ -158,9 +158,6 @@ export default function ChatPage() {
         return;
       }
 
-      // Log every server message for diagnostics (visible in DevTools console)
-      console.log("[voice] WS message:", JSON.stringify(data).slice(0, 300));
-
       // Server-side error in the message body (not a WS close)
       if (data.error) {
         console.error("[voice] Server error:", data.error);
@@ -448,7 +445,18 @@ export default function ChatPage() {
       ? "bg-zinc-200 dark:bg-zinc-700 text-zinc-400 cursor-not-allowed"
       : voiceState === "error"
       ? "bg-red-100 dark:bg-red-900 text-red-500 hover:bg-red-200 dark:hover:bg-red-800"
-      : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700";
+      : "bg-blue-500 hover:bg-blue-600 text-white shadow-md";
+
+  const heroMicClass =
+    voiceState === "listening"
+      ? "bg-red-500 text-white ring-4 ring-red-300 dark:ring-red-700"
+      : voiceState === "connecting"
+      ? "bg-zinc-200 dark:bg-zinc-700 text-zinc-400 cursor-not-allowed"
+      : voiceState === "thinking" || voiceState === "speaking"
+      ? "bg-zinc-200 dark:bg-zinc-700 text-zinc-400 cursor-not-allowed opacity-60"
+      : voiceState === "error"
+      ? "bg-red-100 dark:bg-red-900 text-red-500 hover:bg-red-200 dark:hover:bg-red-800"
+      : "bg-gradient-to-br from-blue-500 to-indigo-600 text-white ring-4 ring-blue-200 dark:ring-blue-900 animate-pulse";
 
   const showVoiceMode = isVoiceActive || voiceMessages.length > 0;
 
@@ -537,14 +545,47 @@ export default function ChatPage() {
           /* ── Text mode ── */
           <>
             {messages.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-full text-center gap-4 px-2">
-                <span className="text-4xl">👋</span>
-                <p className="text-base font-medium text-zinc-500 dark:text-zinc-400">
-                  ¡Hola! Soy el asistente digital de Joshep.
-                  <br />
-                  Pregúntame sobre su experiencia, habilidades o proyectos.
-                </p>
-                <div className="flex flex-wrap justify-center gap-2 mt-2">
+              <div className="flex flex-col items-center justify-center h-full text-center gap-6 px-4">
+
+                {/* Greeting */}
+                <div className="space-y-1">
+                  <p className="text-lg font-semibold text-zinc-800 dark:text-zinc-100">
+                    ¡Hola! Soy el asistente digital de Joshep.
+                  </p>
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                    Pregúntame sobre su experiencia, habilidades o proyectos.
+                  </p>
+                </div>
+
+                {/* Hero mic CTA — only shown when voiceState is idle or error */}
+                {hasMic && (
+                  <div className="flex flex-col items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={startSession}
+                      title="Iniciar conversación de voz"
+                      className={`w-20 h-20 rounded-full flex items-center justify-center shadow-xl transition-all ${heroMicClass}`}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8">
+                        <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4z" />
+                        <path d="M19 10a1 1 0 0 0-2 0 5 5 0 0 1-10 0 1 1 0 0 0-2 0 7 7 0 0 0 6 6.93V19H9a1 1 0 0 0 0 2h6a1 1 0 0 0 0-2h-2v-2.07A7 7 0 0 0 19 10z" />
+                      </svg>
+                    </button>
+                    <p className="text-sm font-medium text-zinc-600 dark:text-zinc-300">
+                      {voiceState === "error" ? "Reintentar voz" : "Hablar con Joshep"}
+                    </p>
+                  </div>
+                )}
+
+                {/* Divider */}
+                <div className="flex items-center gap-3 w-full max-w-xs">
+                  <div className="flex-1 h-px bg-zinc-200 dark:bg-zinc-700" />
+                  <span className="text-xs text-zinc-400">o escribe tu pregunta</span>
+                  <div className="flex-1 h-px bg-zinc-200 dark:bg-zinc-700" />
+                </div>
+
+                {/* Suggestion chips */}
+                <div className="flex flex-wrap justify-center gap-2">
                   {[
                     "¿Qué experiencia tiene en gestión de proyectos?",
                     "¿Tiene certificación PMP?",
@@ -561,6 +602,7 @@ export default function ChatPage() {
                     </button>
                   ))}
                 </div>
+
               </div>
             )}
             {messages.map((m, i) => (
@@ -660,12 +702,12 @@ export default function ChatPage() {
                 voiceState === "speaking"
               }
               title={isVoiceActive ? "Detener sesión de voz" : "Iniciar sesión de voz"}
-              className={`rounded-full p-2.5 transition-all flex-shrink-0 ${micBtnClass}`}
+              className={`rounded-full p-3 transition-all flex-shrink-0 ${micBtnClass}`}
             >
               {voiceState === "connecting" ? (
                 /* Spinner */
                 <svg
-                  className="w-4 h-4 animate-spin"
+                  className="w-5 h-5 animate-spin"
                   xmlns="http://www.w3.org/2000/svg"
                   fill="none"
                   viewBox="0 0 24 24"
@@ -687,7 +729,7 @@ export default function ChatPage() {
                   xmlns="http://www.w3.org/2000/svg"
                   viewBox="0 0 24 24"
                   fill="currentColor"
-                  className="w-4 h-4"
+                  className="w-5 h-5"
                 >
                   <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4z" />
                   <path d="M19 10a1 1 0 0 0-2 0 5 5 0 0 1-10 0 1 1 0 0 0-2 0 7 7 0 0 0 6 6.93V19H9a1 1 0 0 0 0 2h6a1 1 0 0 0 0-2h-2v-2.07A7 7 0 0 0 19 10z" />
