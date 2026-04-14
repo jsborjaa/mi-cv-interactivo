@@ -572,7 +572,7 @@ export default function ChatPage() {
                       </svg>
                     </button>
                     <p className="text-sm font-medium text-zinc-600 dark:text-zinc-300">
-                      {voiceState === "error" ? "Reintentar voz" : "Hablar con Joshep"}
+                      {voiceState === "error" ? "Reintentar voz" : "Hablar conmigo de Joshep"}
                     </p>
                   </div>
                 )}
