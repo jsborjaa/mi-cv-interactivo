@@ -5,20 +5,23 @@ export const config = {
 };
 
 export function proxy(req: NextRequest) {
-  const referer = req.headers.get("referer") ?? "";
   const secFetchSite = req.headers.get("sec-fetch-site") ?? "";
 
-  // Permite solo peticiones que vienen del mismo origen
-  const isSameOrigin =
-    secFetchSite === "same-origin" || secFetchSite === "none";
-
-  // Fallback: si el navegador no envía sec-fetch-site, revisamos el referer
-  const host = req.headers.get("host") ?? "";
-  const refererIsSameHost = referer === "" || referer.includes(host);
-
-  if (!isSameOrigin && !refererIsSameHost) {
-    return new NextResponse("Forbidden", { status: 403 });
+  // Only allow same-origin requests (e.g. server-side reads via the app)
+  // "none" (direct navigation) is intentionally rejected to protect the raw file
+  if (secFetchSite === "same-origin") {
+    return NextResponse.next();
   }
 
-  return NextResponse.next();
+  // Fallback for browsers/environments that do not send sec-fetch-site:
+  // allow only if the referer belongs to the same host
+  if (secFetchSite === "") {
+    const referer = req.headers.get("referer") ?? "";
+    const host = req.headers.get("host") ?? "";
+    if (host && referer.includes(host)) {
+      return NextResponse.next();
+    }
+  }
+
+  return new NextResponse("Forbidden", { status: 403 });
 }
