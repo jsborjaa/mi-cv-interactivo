@@ -72,6 +72,7 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const { messages, sendMessage, status: textStatus } = useChat();
   const isTextLoading = textStatus === "submitted" || textStatus === "streaming";
+  const [textErrorDismissed, setTextErrorDismissed] = useState(false);
 
   // ── Voice state ──────────────────────────────────────────────────────────────────────────
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
@@ -515,6 +516,7 @@ export default function ChatPage() {
         voiceMessagesRef.current = [...voiceMessagesRef.current, userMsg];
         setVoiceMessages(voiceMessagesRef.current);
       } else if (!isTextLoading) {
+        setTextErrorDismissed(false);
         await sendMessage({ text });
       }
     },
@@ -732,10 +734,23 @@ export default function ChatPage() {
                 </div>
               </div>
             )}
-            {textStatus === "error" && (
+            {textStatus === "error" && !textErrorDismissed && (
               <div className="flex justify-start mb-4">
-                <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm text-red-600 dark:text-red-400 text-sm">
-                  Ha ocurrido un error al conectar. Por favor, intenta de nuevo.
+                <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm text-red-600 dark:text-red-400 text-sm space-y-1">
+                  <p>Ha ocurrido un error al conectar. Por favor, intenta de nuevo.</p>
+                  {hasMic && (
+                    <p className="text-red-500 dark:text-red-400">
+                      También puedes{" "}
+                      <button
+                        type="button"
+                        onClick={() => { setTextErrorDismissed(true); startSession(); }}
+                        className="underline font-medium hover:text-red-700 dark:hover:text-red-300 transition-colors"
+                      >
+                        cambiar al modo de voz
+                      </button>
+                      {" "}— suele ser más fluido y tiene menor latencia.
+                    </p>
+                  )}
                 </div>
               </div>
             )}
