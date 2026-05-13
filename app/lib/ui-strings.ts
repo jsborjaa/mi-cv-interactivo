@@ -4,7 +4,7 @@ export const UI_TEXT = {
     role: "IT Project Manager · Digital Twin AI",
     onlineBadge: "En línea",
     stopVoice: "Finalizar voz",
-    linkedinUrl: "https://www.linkedin.com/in/joshep-borja",
+    linkedinUrl: "https://www.linkedin.com/in/joshep-stevens/",
     linkedinLabel: "LinkedIn",
   },
   emptyState: {

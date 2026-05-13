@@ -66,6 +66,8 @@ export function ChatInput({
         className="flex items-center gap-2 bg-white dark:bg-zinc-900 rounded-full shadow-md px-4 py-2 border border-zinc-200 dark:border-zinc-700 focus-within:border-blue-400 dark:focus-within:border-blue-600 transition-colors"
       >
         <input
+          id="chat-input"
+          name="message"
           className="flex-1 bg-transparent outline-none text-sm py-2 px-1 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 min-w-0"
           type="text"
           value={input}

@@ -89,7 +89,6 @@ export function useVoiceSession({ onTurnComplete, seqCounterRef }: UseVoiceSessi
       } else if (event.data instanceof ArrayBuffer) {
         raw = new TextDecoder().decode(event.data);
       } else {
-        console.warn("[voice] Unknown WS frame type:", typeof event.data);
         return;
       }
 
@@ -101,9 +100,8 @@ export function useVoiceSession({ onTurnComplete, seqCounterRef }: UseVoiceSessi
       }
 
       if (data.error) {
-        console.error("[voice] Server error:", data.error);
         setVoiceState("error");
-        setVoiceError(`Error del modelo: ${JSON.stringify(data.error)}`);
+        setVoiceError("Error del modelo. Intenta de nuevo.");
         return;
       }
 
@@ -233,8 +231,6 @@ export function useVoiceSession({ onTurnComplete, seqCounterRef }: UseVoiceSessi
         model: string;
         systemPrompt: string;
       };
-      console.log("[voice] Using model:", model);
-
       // All live/bidi models confirmed working on v1alpha.
       // v1beta does NOT support bidiGenerateContent for these models.
       const apiVersion = "v1alpha";
@@ -272,13 +268,11 @@ export function useVoiceSession({ onTurnComplete, seqCounterRef }: UseVoiceSessi
       };
 
       ws.onmessage = handleWsMessage;
-      ws.onerror = (e) => {
-        console.error("[voice] WebSocket error:", e);
+      ws.onerror = () => {
         setVoiceState("error");
-        setVoiceError("Error de conexión WebSocket. Revisa la consola del navegador.");
+        setVoiceError("Error de conexión. Intenta de nuevo.");
       };
       ws.onclose = (e) => {
-        console.warn("[voice] WebSocket closed:", e.code, e.reason);
         setVoiceState((prev) => {
           if (prev === "idle" || prev === "error") return prev;
           const reason = e.reason ? ` — ${e.reason}` : "";
