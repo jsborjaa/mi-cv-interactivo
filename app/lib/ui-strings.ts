@@ -1,14 +1,14 @@
 export const UI_TEXT = {
   header: {
     name: "Joshep Stevens Borja",
-    role: "IT Project Manager · Digital Twin AI",
+    role: "IT Project Manager · Personal Assistant AI",
     onlineBadge: "En línea",
     stopVoice: "Finalizar voz",
     linkedinUrl: "https://www.linkedin.com/in/joshep-stevens/",
     linkedinLabel: "LinkedIn",
   },
   emptyState: {
-    greeting: "¡Hola! Soy el gemelo digital de Joshep.",
+    greeting: "¡Hola! Soy el asistente digital de Joshep.",
     subtitle: "Pregúntame sobre su experiencia, habilidades o proyectos.",
     voiceCta: "Hablar con el asistente",
     voiceRetry: "Reintentar voz",

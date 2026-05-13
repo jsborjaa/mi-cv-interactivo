@@ -45,6 +45,8 @@ export function useVoiceSession({ onTurnComplete, seqCounterRef }: UseVoiceSessi
   const pendingOutTextRef = useRef("");
   const pendingInTextRef = useRef("");
   const pendingUserMsgIdRef = useRef<string | null>(null);
+  const pendingAssistantMsgIdRef = useRef<string | null>(null);
+  const [isAssistantStreaming, setIsAssistantStreaming] = useState(false);
 
   // Stable reference to the latest voice messages for use inside WS callbacks
   const voiceMessagesRef = useRef<VoiceMsg[]>([]);
@@ -129,10 +131,30 @@ export function useVoiceSession({ onTurnComplete, seqCounterRef }: UseVoiceSessi
         }
       }
 
-      // Output transcription (assistant)
+      // Output transcription (assistant) — stream text live as audio plays
       const outT = sc.outputTranscription as Record<string, unknown> | undefined;
       if (outT?.text && typeof outT.text === "string") {
         pendingOutTextRef.current += outT.text;
+        const streamingText = pendingOutTextRef.current.trim();
+        if (streamingText) {
+          if (!pendingAssistantMsgIdRef.current) {
+            const msgId = crypto.randomUUID();
+            pendingAssistantMsgIdRef.current = msgId;
+            setIsAssistantStreaming(true);
+            const assistantMsg: VoiceMsg = {
+              id: msgId,
+              role: "assistant",
+              text: streamingText,
+              seq: seqCounterRef.current++,
+            };
+            voiceMessagesRef.current = [...voiceMessagesRef.current, assistantMsg];
+          } else {
+            voiceMessagesRef.current = voiceMessagesRef.current.map((m) =>
+              m.id === pendingAssistantMsgIdRef.current ? { ...m, text: streamingText } : m
+            );
+          }
+          setVoiceMessages([...voiceMessagesRef.current]);
+        }
       }
 
       // Input transcription (user speech) — show bubble immediately
@@ -161,25 +183,29 @@ export function useVoiceSession({ onTurnComplete, seqCounterRef }: UseVoiceSessi
         setVoiceState("thinking");
       }
 
-      // Commit assistant message on turn end
+      // Commit on turn end — message already streamed live; just clean up refs
       if (sc.turnComplete === true) {
-        const assistantText = pendingOutTextRef.current.trim();
+        // Edge case: transcription arrived all at once (no streaming chunks)
+        const remainingText = pendingOutTextRef.current.trim();
+        if (remainingText && !pendingAssistantMsgIdRef.current) {
+          const next = [
+            ...voiceMessagesRef.current,
+            {
+              id: crypto.randomUUID(),
+              role: "assistant" as const,
+              text: remainingText,
+              seq: seqCounterRef.current++,
+            },
+          ];
+          voiceMessagesRef.current = next;
+          setVoiceMessages(next);
+        }
         pendingInTextRef.current = "";
         pendingOutTextRef.current = "";
         pendingUserMsgIdRef.current = null;
-
-        const next = [...voiceMessagesRef.current];
-        if (assistantText) {
-          next.push({
-            id: crypto.randomUUID(),
-            role: "assistant",
-            text: assistantText,
-            seq: seqCounterRef.current++,
-          });
-        }
-        voiceMessagesRef.current = next;
-        setVoiceMessages(next);
-        onTurnComplete?.(next);
+        pendingAssistantMsgIdRef.current = null;
+        setIsAssistantStreaming(false);
+        onTurnComplete?.(voiceMessagesRef.current);
         setVoiceState("listening");
       }
     },
@@ -197,6 +223,8 @@ export function useVoiceSession({ onTurnComplete, seqCounterRef }: UseVoiceSessi
     nextPlayTimeRef.current = 0;
     pendingInTextRef.current = "";
     pendingOutTextRef.current = "";
+    pendingAssistantMsgIdRef.current = null;
+    setIsAssistantStreaming(false);
     setVoiceState("idle");
     setVoiceError(null);
   }, [stopCapture]);
@@ -207,6 +235,8 @@ export function useVoiceSession({ onTurnComplete, seqCounterRef }: UseVoiceSessi
     setVoiceError(null);
     pendingInTextRef.current = "";
     pendingOutTextRef.current = "";
+    pendingAssistantMsgIdRef.current = null;
+    setIsAssistantStreaming(false);
 
     try {
       let stream: MediaStream;
@@ -348,6 +378,7 @@ export function useVoiceSession({ onTurnComplete, seqCounterRef }: UseVoiceSessi
     voiceMessages,
     voiceMessagesRef,
     voiceError,
+    isAssistantStreaming,
     startSession,
     stopSession,
     sendVoiceText,

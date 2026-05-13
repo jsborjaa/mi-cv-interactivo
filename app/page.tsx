@@ -4,7 +4,6 @@ import { useChat } from "@ai-sdk/react";
 
 import { useVoiceSession } from "@/app/hooks/useVoiceSession";
 import { ChatHeader } from "@/app/components/ChatHeader";
-import { VoiceStatusBar } from "@/app/components/VoiceStatusBar";
 import { EmptyState } from "@/app/components/EmptyState";
 import { MessageList, getTextFromMessage, type UnifiedMessage } from "@/app/components/MessageList";
 import { ChatInput } from "@/app/components/ChatInput";
@@ -29,7 +28,7 @@ export default function ChatPage() {
   const voiceStartTimeRef = useRef<number>(0);
 
   // ── Voice session ──────────────────────────────────────────────────────────
-  const { voiceState, voiceMessages, voiceMessagesRef, voiceError, startSession, stopSession, sendVoiceText, wsRef } =
+  const { voiceState, voiceMessages, voiceMessagesRef, voiceError, isAssistantStreaming, startSession, stopSession, sendVoiceText, wsRef } =
     useVoiceSession({
       seqCounterRef,
       onTurnComplete: (msgs) => {
@@ -214,8 +213,6 @@ export default function ChatPage() {
     <div className="flex flex-col h-screen w-screen bg-zinc-50 dark:bg-black font-sans">
       <ChatHeader isVoiceActive={isVoiceActive} onStopVoice={handleStopVoice} />
 
-      <VoiceStatusBar voiceState={voiceState} />
-
       <main className="flex-1 overflow-y-auto px-3 sm:px-4 py-6 max-w-2xl w-full mx-auto">
         {allMsgs.length === 0 ? (
           <EmptyState
@@ -233,6 +230,7 @@ export default function ChatPage() {
             textErrorDismissed={textErrorDismissed}
             voiceState={voiceState}
             voiceError={voiceError}
+            isAssistantStreaming={isAssistantStreaming}
             hasMic={hasMic}
             onDismissTextError={() => setTextErrorDismissed(true)}
             onStartVoice={() => { voiceStartTimeRef.current = Date.now(); startSession(); }}

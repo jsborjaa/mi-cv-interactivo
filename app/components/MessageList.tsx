@@ -70,6 +70,7 @@ interface MessageListProps {
   textErrorDismissed: boolean;
   voiceState: VoiceState;
   voiceError: string | null;
+  isAssistantStreaming: boolean;
   hasMic: boolean;
   onDismissTextError: () => void;
   onStartVoice: () => void;
@@ -92,6 +93,7 @@ export function MessageList({
   textErrorDismissed,
   voiceState,
   voiceError,
+  isAssistantStreaming,
   hasMic,
   onDismissTextError,
   onStartVoice,
@@ -171,8 +173,43 @@ export function MessageList({
         </div>
       )}
 
-      {/* Voice: thinking / speaking indicator */}
-      {(voiceState === "thinking" || voiceState === "speaking") && (
+      {/* Voice: connecting pill — centered, minimal */}
+      {voiceState === "connecting" && (
+        <div className="flex justify-center mb-4">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 text-xs font-medium">
+            <svg className="w-3 h-3 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            </svg>
+            <span>Conectando...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Voice: listening pill — centered, shown after each assistant turn */}
+      {voiceState === "listening" && (
+        <div className="flex justify-center mb-4">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 text-xs font-medium">
+            <span className="inline-flex items-end gap-0.5 h-3" aria-hidden>
+              {[0, 1, 2, 3, 4].map((i) => (
+                <span
+                  key={i}
+                  className="w-0.5 rounded-full bg-emerald-500"
+                  style={{
+                    height: `${40 + ((i * 13) % 60)}%`,
+                    animation: `equalizer 0.8s ease-in-out infinite alternate`,
+                    animationDelay: `${i * 0.12}s`,
+                  }}
+                />
+              ))}
+            </span>
+            <span>Escuchando</span>
+          </div>
+        </div>
+      )}
+
+      {/* Voice: thinking / speaking — only while assistant hasn't started responding */}
+      {(voiceState === "thinking" || (voiceState === "speaking" && !isAssistantStreaming)) && (
         <div className="flex items-end gap-2 justify-start mb-4">
           <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0 mb-0.5">
             JS
