@@ -494,10 +494,10 @@ export default function ChatPage() {
       if (isVoiceActive && wsRef.current?.readyState === WebSocket.OPEN) {
         // In voice mode: send text via the open WebSocket
         wsRef.current.send(JSON.stringify({ realtimeInput: { text } }));
-        setVoiceMessages((prev) => [
-          ...prev,
-          { id: crypto.randomUUID(), role: "user", text, seq: seqCounterRef.current++ },
-        ]);
+        const userMsg = { id: crypto.randomUUID(), role: "user" as const, text, seq: seqCounterRef.current++ };
+        // Keep ref in sync so turnComplete doesn't overwrite this message
+        voiceMessagesRef.current = [...voiceMessagesRef.current, userMsg];
+        setVoiceMessages(voiceMessagesRef.current);
       } else if (!isTextLoading) {
         await sendMessage({ text });
       }
