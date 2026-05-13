@@ -25,6 +25,7 @@ interface VoiceMsg {
   id: string;
   role: "user" | "assistant";
   text: string;
+  seq: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -72,11 +73,12 @@ export default function ChatPage() {
   const { messages, sendMessage, status: textStatus } = useChat();
   const isTextLoading = textStatus === "submitted" || textStatus === "streaming";
 
-  // ── Voice state ────────────────────────────────────────────────────────────
+  // ── Voice state ──────────────────────────────────────────────────────────────────────────
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [voiceMessages, setVoiceMessages] = useState<VoiceMsg[]>([]);
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [hasMic, setHasMic] = useState(false);
+  const isVoiceActive = voiceState !== "idle" && voiceState !== "error";
 
   // ── Voice refs (audio pipeline + WS) ──────────────────────────────────────
   const wsRef = useRef<WebSocket | null>(null);
@@ -89,14 +91,56 @@ export default function ChatPage() {
   const pendingOutTextRef = useRef(""); // assistant transcription accumulator
   const pendingInTextRef = useRef("");  // user transcription accumulator
 
-  const isVoiceActive = voiceState !== "idle" && voiceState !== "error";
-
+  // ── Conversation logging refs ──────────────────────────────────────────────
+  const textSessionIdRef = useRef<string | null>(null);
+  const sessionStartRef = useRef<string | null>(null);
+  const voiceStartTimeRef = useRef<number>(0);
+  const voiceMessagesRef = useRef<VoiceMsg[]>([]);
+  // voiceMessagesRef is updated ONLY from the WS handler.
+  // Never from the render body — causes stale overwrites during batched re-renders.
+  const textMessagesRef = useRef<Array<{ role: string; content: string; seq: number }>>([]);
+  const seqCounterRef = useRef(0);
+  const textMsgSeqsRef = useRef<Map<string, number>>(new Map());
   // Detect mic support after hydration
   useEffect(() => {
     setHasMic(
       typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia
     );
   }, []);
+
+  // Generate a fresh session ID on every page load (each visit = independent session)
+  useEffect(() => {
+    textSessionIdRef.current = crypto.randomUUID();
+    sessionStartRef.current = new Date().toISOString();
+  }, []);
+
+  // Log unified session after each text response
+  useEffect(() => {
+    if (textStatus === "ready" && messages.length >= 2) {
+      const sessionId = textSessionIdRef.current;
+      if (!sessionId) return;
+      // Seq numbers are assigned eagerly in the render body (allMsgs map); just read them here.
+      textMessagesRef.current = messages.map((m) => ({
+        role: m.role,
+        content: getTextFromMessage(m),
+        seq: textMsgSeqsRef.current.get(m.id) ?? 0,
+      }));
+      const sorted = [
+        ...textMessagesRef.current,
+        ...voiceMessagesRef.current.map((m) => ({ role: m.role, content: m.text, seq: m.seq })),
+      ].sort((a, b) => a.seq - b.seq).map(({ role, content }) => ({ role, content }));
+      fetch("/api/log-conversation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          type: voiceMessagesRef.current.length > 0 ? "voice" : "text",
+          messages: sorted,
+          startedAt: sessionStartRef.current ?? new Date().toISOString(),
+        }),
+      }).catch(() => undefined);
+    }
+  }, [textStatus, messages]);
 
   // Auto-scroll
   useEffect(() => {
@@ -214,18 +258,30 @@ export default function ChatPage() {
         pendingInTextRef.current = "";
         pendingOutTextRef.current = "";
 
-        setVoiceMessages((prev) => {
-          const next = [...prev];
-          if (userText)
-            next.push({ id: crypto.randomUUID(), role: "user", text: userText });
-          if (assistantText)
-            next.push({
-              id: crypto.randomUUID(),
-              role: "assistant",
-              text: assistantText,
-            });
-          return next;
-        });
+        const next = [...voiceMessagesRef.current];
+        if (userText)
+          next.push({ id: crypto.randomUUID(), role: "user", text: userText, seq: seqCounterRef.current++ });
+        if (assistantText)
+          next.push({ id: crypto.randomUUID(), role: "assistant", text: assistantText, seq: seqCounterRef.current++ });
+        voiceMessagesRef.current = next;
+        setVoiceMessages(next);
+        // Log on every voice turn — upserts under unified session ID
+        if (textSessionIdRef.current) {
+          const sorted = [
+            ...textMessagesRef.current,
+            ...next.map((m) => ({ role: m.role, content: m.text, seq: m.seq })),
+          ].sort((a, b) => a.seq - b.seq).map(({ role, content }) => ({ role, content }));
+          fetch("/api/log-conversation", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sessionId: textSessionIdRef.current,
+              type: textMessagesRef.current.length > 0 ? "text" : "voice",
+              messages: sorted,
+              startedAt: sessionStartRef.current || new Date().toISOString(),
+            }),
+          }).catch(() => undefined);
+        }
         setVoiceState("listening");
       }
     },
@@ -242,8 +298,33 @@ export default function ChatPage() {
     captureCtxRef.current = null;
   }, []);
 
+  // Safety-net: final log on stop in case the last turn didn't complete before user stopped
+  const logVoiceConversation = useCallback(() => {
+    if (!textSessionIdRef.current) return;
+    const sorted = [
+      ...textMessagesRef.current,
+      ...voiceMessagesRef.current.map((m) => ({ role: m.role, content: m.text, seq: m.seq })),
+    ].sort((a, b) => a.seq - b.seq).map(({ role, content }) => ({ role, content }));
+    if (sorted.length === 0) return;
+    const durationSeconds = voiceStartTimeRef.current
+      ? Math.round((Date.now() - voiceStartTimeRef.current) / 1000)
+      : undefined;
+    fetch("/api/log-conversation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: textSessionIdRef.current,
+        type: voiceMessagesRef.current.length > 0 ? (textMessagesRef.current.length > 0 ? "text" : "voice") : "text",
+        messages: sorted,
+        startedAt: sessionStartRef.current || new Date().toISOString(),
+        durationSeconds,
+      }),
+    }).catch(() => undefined);
+  }, []);
+
   // ── Stop full voice session ────────────────────────────────────────────────
   const stopSession = useCallback(() => {
+    logVoiceConversation();
     if (setupTimeoutRef.current) clearTimeout(setupTimeoutRef.current);
     wsRef.current?.close();
     wsRef.current = null;
@@ -255,15 +336,16 @@ export default function ChatPage() {
     pendingOutTextRef.current = "";
     setVoiceState("idle");
     setVoiceError(null);
-  }, [stopCapture]);
+  }, [stopCapture, logVoiceConversation]);
 
   // ── Start voice session ────────────────────────────────────────────────────
   const startSession = useCallback(async () => {
     setVoiceState("connecting");
     setVoiceError(null);
-    setVoiceMessages([]);
+    // Do NOT reset voiceMessages — accumulate across sessions in same page visit
     pendingInTextRef.current = "";
     pendingOutTextRef.current = "";
+    voiceStartTimeRef.current = Date.now();
 
     try {
       // 1. Ask for mic permission FIRST so the dialog doesn't race with WS setup.
@@ -324,6 +406,8 @@ export default function ChatPage() {
                   },
                 },
               },
+              inputAudioTranscription: {},
+              outputAudioTranscription: {},
               systemInstruction: { parts: [{ text: systemPrompt }] },
             },
           })
@@ -412,7 +496,7 @@ export default function ChatPage() {
         wsRef.current.send(JSON.stringify({ realtimeInput: { text } }));
         setVoiceMessages((prev) => [
           ...prev,
-          { id: crypto.randomUUID(), role: "user", text },
+          { id: crypto.randomUUID(), role: "user", text, seq: seqCounterRef.current++ },
         ]);
       } else if (!isTextLoading) {
         await sendMessage({ text });
@@ -458,7 +542,29 @@ export default function ChatPage() {
       ? "bg-red-100 dark:bg-red-900 text-red-500 hover:bg-red-200 dark:hover:bg-red-800"
       : "bg-gradient-to-br from-blue-500 to-indigo-600 text-white ring-4 ring-blue-200 dark:ring-blue-900 animate-pulse";
 
-  const showVoiceMode = isVoiceActive || voiceMessages.length > 0;
+  // Unified chronological message list — text and voice interleaved by seq number
+  const allMsgs: Array<{ id: string; role: "user" | "assistant"; content: string; source: "text" | "voice"; seq: number }> = [
+    ...messages.map((m) => {
+      // Assign seq eagerly on first render — don't wait for textStatus==="ready"
+      if (!textMsgSeqsRef.current.has(m.id)) {
+        textMsgSeqsRef.current.set(m.id, seqCounterRef.current++);
+      }
+      return {
+        id: m.id,
+        role: m.role as "user" | "assistant",
+        content: getTextFromMessage(m),
+        source: "text" as const,
+        seq: textMsgSeqsRef.current.get(m.id)!,
+      };
+    }),
+    ...voiceMessages.map((m) => ({
+      id: m.id,
+      role: m.role,
+      content: m.text,
+      source: "voice" as const,
+      seq: m.seq,
+    })),
+  ].sort((a, b) => a.seq - b.seq);
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -508,9 +614,9 @@ export default function ChatPage() {
       {/* Messages */}
       <main className="flex-1 overflow-y-auto px-4 py-6 max-w-2xl w-full mx-auto">
 
-        {showVoiceMode ? (
-          /* ── Voice mode ── */
-          voiceMessages.length === 0 ? (
+        {allMsgs.length === 0 ? (
+          /* ── Empty state ── */
+          isVoiceActive ? (
             <div className="flex flex-col items-center justify-center h-full text-center gap-4 px-2 text-zinc-500 dark:text-zinc-400">
               <span className="text-4xl">🎙️</span>
               <p className="text-base font-medium">
@@ -520,7 +626,70 @@ export default function ChatPage() {
               </p>
             </div>
           ) : (
-            voiceMessages.map((m) => (
+            <div className="flex flex-col items-center justify-center h-full text-center gap-6 px-4">
+
+              {/* Greeting */}
+              <div className="space-y-1">
+                <p className="text-lg font-semibold text-zinc-800 dark:text-zinc-100">
+                  ¡Hola! Soy el asistente digital de Joshep.
+                </p>
+                <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                  Pregúntame sobre su experiencia, habilidades o proyectos.
+                </p>
+              </div>
+
+              {/* Hero mic CTA — only shown when voiceState is idle or error */}
+              {hasMic && (
+                <div className="flex flex-col items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={startSession}
+                    title="Iniciar conversación de voz"
+                    className={`w-20 h-20 rounded-full flex items-center justify-center shadow-xl transition-all ${heroMicClass}`}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8">
+                      <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4z" />
+                      <path d="M19 10a1 1 0 0 0-2 0 5 5 0 0 1-10 0 1 1 0 0 0-2 0 7 7 0 0 0 6 6.93V19H9a1 1 0 0 0 0 2h6a1 1 0 0 0 0-2h-2v-2.07A7 7 0 0 0 19 10z" />
+                    </svg>
+                  </button>
+                  <p className="text-sm font-medium text-zinc-600 dark:text-zinc-300">
+                    {voiceState === "error" ? "Reintentar voz" : "Hablar conmigo de Joshep"}
+                  </p>
+                </div>
+              )}
+
+              {/* Divider */}
+              <div className="flex items-center gap-3 w-full max-w-xs">
+                <div className="flex-1 h-px bg-zinc-200 dark:bg-zinc-700" />
+                <span className="text-xs text-zinc-400">o escribe tu pregunta</span>
+                <div className="flex-1 h-px bg-zinc-200 dark:bg-zinc-700" />
+              </div>
+
+              {/* Suggestion chips */}
+              <div className="flex flex-wrap justify-center gap-2">
+                {[
+                  "¿Qué experiencia tiene en gestión de proyectos?",
+                  "¿Tiene certificación PMP?",
+                  "¿Qué tecnologías domina?",
+                  "¿Tiene experiencia con IA?",
+                  "¿En qué proyectos ha trabajado?",
+                ].map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    onClick={() => setInput(suggestion)}
+                    className="text-xs px-3 py-1.5 rounded-full border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+
+            </div>
+          )
+        ) : (
+          /* ── Unified chronological message list ── */
+          <>
+            {allMsgs.map((m) => (
               <div
                 key={m.id}
                 className={`mb-4 flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
@@ -533,94 +702,9 @@ export default function ChatPage() {
                   }`}
                 >
                   {m.role === "assistant" ? (
-                    <MarkdownMessage content={m.text} />
+                    <MarkdownMessage content={m.content} />
                   ) : (
-                    <span>{m.text}</span>
-                  )}
-                </div>
-              </div>
-            ))
-          )
-        ) : (
-          /* ── Text mode ── */
-          <>
-            {messages.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-full text-center gap-6 px-4">
-
-                {/* Greeting */}
-                <div className="space-y-1">
-                  <p className="text-lg font-semibold text-zinc-800 dark:text-zinc-100">
-                    ¡Hola! Soy el asistente digital de Joshep.
-                  </p>
-                  <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                    Pregúntame sobre su experiencia, habilidades o proyectos.
-                  </p>
-                </div>
-
-                {/* Hero mic CTA — only shown when voiceState is idle or error */}
-                {hasMic && (
-                  <div className="flex flex-col items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={startSession}
-                      title="Iniciar conversación de voz"
-                      className={`w-20 h-20 rounded-full flex items-center justify-center shadow-xl transition-all ${heroMicClass}`}
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8">
-                        <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4z" />
-                        <path d="M19 10a1 1 0 0 0-2 0 5 5 0 0 1-10 0 1 1 0 0 0-2 0 7 7 0 0 0 6 6.93V19H9a1 1 0 0 0 0 2h6a1 1 0 0 0 0-2h-2v-2.07A7 7 0 0 0 19 10z" />
-                      </svg>
-                    </button>
-                    <p className="text-sm font-medium text-zinc-600 dark:text-zinc-300">
-                      {voiceState === "error" ? "Reintentar voz" : "Hablar conmigo de Joshep"}
-                    </p>
-                  </div>
-                )}
-
-                {/* Divider */}
-                <div className="flex items-center gap-3 w-full max-w-xs">
-                  <div className="flex-1 h-px bg-zinc-200 dark:bg-zinc-700" />
-                  <span className="text-xs text-zinc-400">o escribe tu pregunta</span>
-                  <div className="flex-1 h-px bg-zinc-200 dark:bg-zinc-700" />
-                </div>
-
-                {/* Suggestion chips */}
-                <div className="flex flex-wrap justify-center gap-2">
-                  {[
-                    "¿Qué experiencia tiene en gestión de proyectos?",
-                    "¿Tiene certificación PMP?",
-                    "¿Qué tecnologías domina?",
-                    "¿Tiene experiencia con IA?",
-                    "¿En qué proyectos ha trabajado?",
-                  ].map((suggestion) => (
-                    <button
-                      key={suggestion}
-                      onClick={() => setInput(suggestion)}
-                      className="text-xs px-3 py-1.5 rounded-full border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-                    >
-                      {suggestion}
-                    </button>
-                  ))}
-                </div>
-
-              </div>
-            )}
-            {messages.map((m, i) => (
-              <div
-                key={i}
-                className={`mb-4 flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
-              >
-                <div
-                  className={`rounded-2xl px-4 py-3 max-w-[80%] text-sm shadow-sm ${
-                    m.role === "user"
-                      ? "bg-blue-500 text-white rounded-br-sm"
-                      : "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 rounded-bl-sm"
-                  }`}
-                >
-                  {m.role === "assistant" ? (
-                    <MarkdownMessage content={getTextFromMessage(m)} />
-                  ) : (
-                    <span>{getTextFromMessage(m)}</span>
+                    <span>{m.content}</span>
                   )}
                 </div>
               </div>
