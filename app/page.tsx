@@ -90,6 +90,7 @@ export default function ChatPage() {
   const setupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingOutTextRef = useRef(""); // assistant transcription accumulator
   const pendingInTextRef = useRef("");  // user transcription accumulator
+  const pendingUserMsgIdRef = useRef<string | null>(null); // ID of the user bubble shown while assistant processes
 
   // ── Conversation logging refs ──────────────────────────────────────────────
   const textSessionIdRef = useRef<string | null>(null);
@@ -244,23 +245,38 @@ export default function ChatPage() {
         pendingOutTextRef.current += outT.text;
       }
 
-      // Input transcription (user speech)
+      // Input transcription (user speech) — show immediately so user sees their message
+      // before the assistant starts responding
       const inT = sc.inputTranscription as Record<string, unknown> | undefined;
       if (inT?.text && typeof inT.text === "string") {
         pendingInTextRef.current += inT.text;
+        const fullUserText = pendingInTextRef.current.trim();
+        if (fullUserText) {
+          if (!pendingUserMsgIdRef.current) {
+            // First chunk: create and show the user bubble now
+            const msgId = crypto.randomUUID();
+            pendingUserMsgIdRef.current = msgId;
+            const userMsg: VoiceMsg = { id: msgId, role: "user", text: fullUserText, seq: seqCounterRef.current++ };
+            voiceMessagesRef.current = [...voiceMessagesRef.current, userMsg];
+          } else {
+            // Subsequent chunks: update the existing bubble in place
+            voiceMessagesRef.current = voiceMessagesRef.current.map((m) =>
+              m.id === pendingUserMsgIdRef.current ? { ...m, text: fullUserText } : m
+            );
+          }
+          setVoiceMessages([...voiceMessagesRef.current]);
+        }
         setVoiceState("thinking");
       }
 
-      // Commit both messages when the model's turn ends
+      // Commit assistant message when the model's turn ends
       if (sc.turnComplete === true) {
-        const userText = pendingInTextRef.current.trim();
         const assistantText = pendingOutTextRef.current.trim();
         pendingInTextRef.current = "";
         pendingOutTextRef.current = "";
+        pendingUserMsgIdRef.current = null;
 
         const next = [...voiceMessagesRef.current];
-        if (userText)
-          next.push({ id: crypto.randomUUID(), role: "user", text: userText, seq: seqCounterRef.current++ });
         if (assistantText)
           next.push({ id: crypto.randomUUID(), role: "assistant", text: assistantText, seq: seqCounterRef.current++ });
         voiceMessagesRef.current = next;
